@@ -1,17 +1,15 @@
-package common
-
 //
 // gopsutil is a port of psutil(http://pythonhosted.org/psutil/).
 // This covers these architectures.
 //  - linux (amd64, arm)
 //  - freebsd (amd64)
 //  - windows (amd64)
+package common
+
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -21,12 +19,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
-)
-
-var (
-	Timeout    = 3 * time.Second
-	ErrTimeout = errors.New("Command timed out.")
 )
 
 type Invoker interface {
@@ -36,8 +28,7 @@ type Invoker interface {
 type Invoke struct{}
 
 func (i Invoke) Command(name string, arg ...string) ([]byte, error) {
-	cmd := exec.Command(name, arg...)
-	return CombinedOutputTimeout(cmd, Timeout)
+	return exec.Command(name, arg...).Output()
 }
 
 type FakeInvoke struct {
@@ -68,11 +59,12 @@ func (i FakeInvoke) Command(name string, arg ...string) ([]byte, error) {
 	}
 	if PathExists(fpath) {
 		return ioutil.ReadFile(fpath)
+	} else {
+		return exec.Command(name, arg...).Output()
 	}
-	return exec.Command(name, arg...).Output()
 }
 
-var ErrNotImplementedError = errors.New("not implemented yet")
+var NotImplementedError = errors.New("not implemented yet")
 
 // ReadLines reads contents from a file and splits them by new lines.
 // A convenience wrapper to ReadLinesOffsetN(filename, 0, -1).
@@ -126,23 +118,6 @@ func IntToString(orig []int8) string {
 	return string(ret[0:size])
 }
 
-func UintToString(orig []uint8) string {
-	ret := make([]byte, len(orig))
-	size := -1
-	for i, o := range orig {
-		if o == 0 {
-			size = i
-			break
-		}
-		ret[i] = byte(o)
-	}
-	if size == -1 {
-		size = len(orig)
-	}
-
-	return string(ret[0:size])
-}
-
 func ByteToString(orig []byte) string {
 	n := -1
 	l := -1
@@ -166,33 +141,6 @@ func ByteToString(orig []byte) string {
 	return string(orig[l:n])
 }
 
-// ReadInts reads contents from single line file and returns them as []int32.
-func ReadInts(filename string) ([]int64, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return []int64{}, err
-	}
-	defer f.Close()
-
-	var ret []int64
-
-	r := bufio.NewReader(f)
-
-	// The int files that this is concerned with should only be one liners.
-	line, err := r.ReadString('\n')
-	if err != nil {
-		return []int64{}, err
-	}
-
-	i, err := strconv.ParseInt(strings.Trim(line, "\n"), 10, 32)
-	if err != nil {
-		return []int64{}, err
-	}
-	ret = append(ret, i)
-
-	return ret, nil
-}
-
 // Parse to int32 without error
 func mustParseInt32(val string) int32 {
 	vv, _ := strconv.ParseInt(val, 10, 32)
@@ -211,7 +159,7 @@ func mustParseFloat64(val string) float64 {
 	return vv
 }
 
-// StringsHas checks the target string slice contains src or not
+// StringsHas checks the target string slice containes src or not
 func StringsHas(target []string, src string) bool {
 	for _, t := range target {
 		if strings.TrimSpace(t) == src {
@@ -225,16 +173,6 @@ func StringsHas(target []string, src string) bool {
 func StringsContains(target []string, src string) bool {
 	for _, t := range target {
 		if strings.Contains(t, src) {
-			return true
-		}
-	}
-	return false
-}
-
-// IntContains checks the src in any int of the target int slice.
-func IntContains(target []int, src int) bool {
-	for _, t := range target {
-		if src == t {
 			return true
 		}
 	}
@@ -271,7 +209,7 @@ func PathExists(filename string) bool {
 	return false
 }
 
-//GetEnv retrieves the environment variable key. If it does not exist it returns the default.
+//GetEnv retreives the environment variable key. If it does not exist it returns the default.
 func GetEnv(key string, dfault string, combineWith ...string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -298,46 +236,4 @@ func HostProc(combineWith ...string) string {
 
 func HostSys(combineWith ...string) string {
 	return GetEnv("HOST_SYS", "/sys", combineWith...)
-}
-
-func HostEtc(combineWith ...string) string {
-	return GetEnv("HOST_ETC", "/etc", combineWith...)
-}
-
-// CombinedOutputTimeout runs the given command with the given timeout and
-// returns the combined output of stdout and stderr.
-// If the command times out, it attempts to kill the process.
-// copied from https://github.com/influxdata/telegraf
-func CombinedOutputTimeout(c *exec.Cmd, timeout time.Duration) ([]byte, error) {
-	var b bytes.Buffer
-	c.Stdout = &b
-	c.Stderr = &b
-	if err := c.Start(); err != nil {
-		return nil, err
-	}
-	err := WaitTimeout(c, timeout)
-	return b.Bytes(), err
-}
-
-// WaitTimeout waits for the given command to finish with a timeout.
-// It assumes the command has already been started.
-// If the command times out, it attempts to kill the process.
-// copied from https://github.com/influxdata/telegraf
-func WaitTimeout(c *exec.Cmd, timeout time.Duration) error {
-	timer := time.NewTimer(timeout)
-	done := make(chan error)
-	go func() { done <- c.Wait() }()
-	select {
-	case err := <-done:
-		timer.Stop()
-		return err
-	case <-timer.C:
-		if err := c.Process.Kill(); err != nil {
-			log.Printf("FATAL error killing process: %s", err)
-			return err
-		}
-		// wait for the command to return after killing it
-		<-done
-		return ErrTimeout
-	}
 }

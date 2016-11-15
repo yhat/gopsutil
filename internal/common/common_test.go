@@ -88,10 +88,3 @@ func TestPathExists(t *testing.T) {
 		t.Error("not exists but return exists")
 	}
 }
-
-func TestHostEtc(t *testing.T) {
-	p := HostEtc("mtab")
-	if p != "/etc/mtab" {
-		t.Errorf("invalid HostEtc, %s", p)
-	}
-}

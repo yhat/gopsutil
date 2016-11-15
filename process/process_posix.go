@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-
-	"github.com/yhat/gopsutil/internal/common"
 )
 
 // POSIX
@@ -53,8 +51,6 @@ func getTerminalMap() (map[uint64]string, error) {
 	return ret, nil
 }
 
-// SendSignal sends a syscall.Signal to the process.
-// Currently, SIGSTOP, SIGCONT, SIGTERM and SIGKILL are supported.
 func (p *Process) SendSignal(sig syscall.Signal) error {
 	sigAsStr := "INT"
 	switch sig {
@@ -68,16 +64,9 @@ func (p *Process) SendSignal(sig syscall.Signal) error {
 		sigAsStr = "KILL"
 	}
 
-	kill, err := exec.LookPath("kill")
-	if err != nil {
-		return err
-	}
-	cmd := exec.Command(kill, "-s", sigAsStr, strconv.Itoa(int(p.Pid)))
+	cmd := exec.Command("kill", "-s", sigAsStr, strconv.Itoa(int(p.Pid)))
 	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	err = common.WaitTimeout(cmd, common.Timeout)
+	err := cmd.Run()
 	if err != nil {
 		return err
 	}
@@ -85,27 +74,18 @@ func (p *Process) SendSignal(sig syscall.Signal) error {
 	return nil
 }
 
-// Suspend sends SIGSTOP to the process.
 func (p *Process) Suspend() error {
 	return p.SendSignal(syscall.SIGSTOP)
 }
-
-// Resume sends SIGCONT to the process.
 func (p *Process) Resume() error {
 	return p.SendSignal(syscall.SIGCONT)
 }
-
-// Terminate sends SIGTERM to the process.
 func (p *Process) Terminate() error {
 	return p.SendSignal(syscall.SIGTERM)
 }
-
-// Kill sends SIGKILL to the process.
 func (p *Process) Kill() error {
 	return p.SendSignal(syscall.SIGKILL)
 }
-
-// Username returns a username of the process.
 func (p *Process) Username() (string, error) {
 	uids, err := p.Uids()
 	if err != nil {

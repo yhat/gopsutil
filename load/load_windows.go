@@ -3,17 +3,11 @@
 package load
 
 import (
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
-func Avg() (*AvgStat, error) {
-	ret := AvgStat{}
+func LoadAvg() (*LoadAvgStat, error) {
+	ret := LoadAvgStat{}
 
-	return &ret, common.ErrNotImplementedError
-}
-
-func Misc() (*MiscStat, error) {
-	ret := MiscStat{}
-
-	return &ret, common.ErrNotImplementedError
+	return &ret, common.NotImplementedError
 }

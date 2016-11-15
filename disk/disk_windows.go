@@ -9,7 +9,7 @@ import (
 
 	"github.com/StackExchange/wmi"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 var (
@@ -36,8 +36,8 @@ type Win32_PerfFormattedData struct {
 
 const WaitMSec = 500
 
-func Usage(path string) (*UsageStat, error) {
-	ret := &UsageStat{}
+func DiskUsage(path string) (*DiskUsageStat, error) {
+	ret := &DiskUsageStat{}
 
 	lpFreeBytesAvailable := int64(0)
 	lpTotalNumberOfBytes := int64(0)
@@ -50,7 +50,7 @@ func Usage(path string) (*UsageStat, error) {
 	if diskret == 0 {
 		return nil, err
 	}
-	ret = &UsageStat{
+	ret = &DiskUsageStat{
 		Path:        path,
 		Total:       uint64(lpTotalNumberOfBytes),
 		Free:        uint64(lpTotalNumberOfFreeBytes),
@@ -64,8 +64,8 @@ func Usage(path string) (*UsageStat, error) {
 	return ret, nil
 }
 
-func Partitions(all bool) ([]PartitionStat, error) {
-	var ret []PartitionStat
+func DiskPartitions(all bool) ([]DiskPartitionStat, error) {
+	var ret []DiskPartitionStat
 	lpBuffer := make([]byte, 254)
 	diskret, _, err := procGetLogicalDriveStringsW.Call(
 		uintptr(len(lpBuffer)),
@@ -116,7 +116,7 @@ func Partitions(all bool) ([]PartitionStat, error) {
 					opts += ".compress"
 				}
 
-				d := PartitionStat{
+				d := DiskPartitionStat{
 					Mountpoint: path,
 					Device:     path,
 					Fstype:     string(bytes.Replace(lpFileSystemNameBuffer, []byte("\x00"), []byte(""), -1)),
@@ -129,8 +129,8 @@ func Partitions(all bool) ([]PartitionStat, error) {
 	return ret, nil
 }
 
-func IOCounters() (map[string]IOCountersStat, error) {
-	ret := make(map[string]IOCountersStat, 0)
+func DiskIOCounters() (map[string]DiskIOCountersStat, error) {
+	ret := make(map[string]DiskIOCountersStat, 0)
 	var dst []Win32_PerfFormattedData
 
 	err := wmi.Query("SELECT * FROM Win32_PerfFormattedData_PerfDisk_LogicalDisk ", &dst)
@@ -141,7 +141,7 @@ func IOCounters() (map[string]IOCountersStat, error) {
 		if len(d.Name) > 3 { // not get _Total or Harddrive
 			continue
 		}
-		ret[d.Name] = IOCountersStat{
+		ret[d.Name] = DiskIOCountersStat{
 			Name:       d.Name,
 			ReadCount:  uint64(d.AvgDiskReadQueueLength),
 			WriteCount: d.AvgDiskWriteQueueLength,

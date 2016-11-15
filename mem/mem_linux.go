@@ -7,7 +7,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 func VirtualMemory() (*VirtualMemoryStat, error) {
@@ -46,18 +46,12 @@ func VirtualMemory() (*VirtualMemoryStat, error) {
 			ret.Active = t * 1024
 		case "Inactive":
 			ret.Inactive = t * 1024
-		case "Writeback":
-			ret.Writeback = t * 1024
-		case "WritebackTmp":
-			ret.WritebackTmp = t * 1024
-		case "Dirty":
-			ret.Dirty = t * 1024
 		}
 	}
 	if !memavail {
 		ret.Available = ret.Free + ret.Buffers + ret.Cached
 	}
-	ret.Used = ret.Total - ret.Available
+	ret.Used = ret.Total - ret.Free
 	ret.UsedPercent = float64(ret.Total-ret.Available) / float64(ret.Total) * 100.0
 
 	return ret, nil
@@ -70,8 +64,8 @@ func SwapMemory() (*SwapMemoryStat, error) {
 		return nil, err
 	}
 	ret := &SwapMemoryStat{
-		Total: uint64(sysinfo.Totalswap) * uint64(sysinfo.Unit),
-		Free:  uint64(sysinfo.Freeswap) * uint64(sysinfo.Unit),
+		Total: uint64(sysinfo.Totalswap),
+		Free:  uint64(sysinfo.Freeswap),
 	}
 	ret.Used = ret.Total - ret.Free
 	//check Infinity

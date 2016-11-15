@@ -3,15 +3,14 @@
 package disk
 
 import (
-	"path"
 	"syscall"
 	"unsafe"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
-func Partitions(all bool) ([]PartitionStat, error) {
-	var ret []PartitionStat
+func DiskPartitions(all bool) ([]DiskPartitionStat, error) {
+	var ret []DiskPartitionStat
 
 	count, err := Getfsstat(nil, MntWait)
 	if err != nil {
@@ -69,26 +68,20 @@ func Partitions(all bool) ([]PartitionStat, error) {
 		if stat.Flags&MntNFS4ACLs != 0 {
 			opts += ",nfs4acls"
 		}
-		d := PartitionStat{
+		d := DiskPartitionStat{
 			Device:     common.IntToString(stat.Mntfromname[:]),
 			Mountpoint: common.IntToString(stat.Mntonname[:]),
 			Fstype:     common.IntToString(stat.Fstypename[:]),
 			Opts:       opts,
 		}
-		if all == false {
-			if !path.IsAbs(d.Device) || !common.PathExists(d.Device) {
-				continue
-			}
-		}
-
 		ret = append(ret, d)
 	}
 
 	return ret, nil
 }
 
-func IOCounters() (map[string]IOCountersStat, error) {
-	return nil, common.ErrNotImplementedError
+func DiskIOCounters() (map[string]DiskIOCountersStat, error) {
+	return nil, common.NotImplementedError
 }
 
 func Getfsstat(buf []Statfs_t, flags int) (n int, err error) {

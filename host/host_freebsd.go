@@ -14,8 +14,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/yhat/gopsutil/internal/common"
-	"github.com/yhat/gopsutil/process"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 const (
@@ -24,8 +23,8 @@ const (
 	UTHostSize = 16
 )
 
-func Info() (*InfoStat, error) {
-	ret := &InfoStat{
+func HostInfo() (*HostInfoStat, error) {
+	ret := &HostInfoStat{
 		OS:             runtime.GOOS,
 		PlatformFamily: "freebsd",
 	}
@@ -35,15 +34,13 @@ func Info() (*InfoStat, error) {
 		ret.Hostname = hostname
 	}
 
-	platform, family, version, err := PlatformInformation()
+	platform, family, version, err := GetPlatformInformation()
 	if err == nil {
 		ret.Platform = platform
 		ret.PlatformFamily = family
 		ret.PlatformVersion = version
-		ret.KernelVersion = version
 	}
-
-	system, role, err := Virtualization()
+	system, role, err := GetVirtualization()
 	if err == nil {
 		ret.VirtualizationSystem = system
 		ret.VirtualizationRole = role
@@ -53,16 +50,6 @@ func Info() (*InfoStat, error) {
 	if err == nil {
 		ret.BootTime = boot
 		ret.Uptime = uptime(boot)
-	}
-
-	procs, err := process.Pids()
-	if err == nil {
-		ret.Procs = uint64(len(procs))
-	}
-
-	values, err := common.DoSysctrl("kern.hostuuid")
-	if err == nil && len(values) == 1 && values[0] != "" {
-		ret.HostID = values[0]
 	}
 
 	return ret, nil
@@ -114,11 +101,13 @@ func Users() ([]UserStat, error) {
 		return ret, err
 	}
 
-	entrySize := sizeOfUtmpx
+	u := Utmpx{}
+	entrySize := int(unsafe.Sizeof(u)) - 3
+	entrySize = 197 // TODO: why should 197
 	count := len(buf) / entrySize
 
 	for i := 0; i < count; i++ {
-		b := buf[i*sizeOfUtmpx : (i+1)*sizeOfUtmpx]
+		b := buf[i*entrySize : i*entrySize+entrySize]
 		var u Utmpx
 		br := bytes.NewReader(b)
 		err := binary.Read(br, binary.LittleEndian, &u)
@@ -140,21 +129,17 @@ func Users() ([]UserStat, error) {
 
 }
 
-func PlatformInformation() (string, string, string, error) {
+func GetPlatformInformation() (string, string, string, error) {
 	platform := ""
 	family := ""
 	version := ""
-	uname, err := exec.LookPath("uname")
-	if err != nil {
-		return "", "", "", err
-	}
 
-	out, err := invoke.Command(uname, "-s")
+	out, err := exec.Command("uname", "-s").Output()
 	if err == nil {
 		platform = strings.ToLower(strings.TrimSpace(string(out)))
 	}
 
-	out, err = invoke.Command(uname, "-r")
+	out, err = exec.Command("uname", "-r").Output()
 	if err == nil {
 		version = strings.ToLower(strings.TrimSpace(string(out)))
 	}
@@ -162,7 +147,7 @@ func PlatformInformation() (string, string, string, error) {
 	return platform, family, version, nil
 }
 
-func Virtualization() (string, string, error) {
+func GetVirtualization() (string, string, error) {
 	system := ""
 	role := ""
 

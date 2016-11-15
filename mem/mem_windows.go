@@ -6,14 +6,14 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 var (
 	procGlobalMemoryStatusEx = common.Modkernel32.NewProc("GlobalMemoryStatusEx")
 )
 
-type memoryStatusEx struct {
+type MEMORYSTATUSEX struct {
 	cbSize                  uint32
 	dwMemoryLoad            uint32
 	ullTotalPhys            uint64 // in bytes
@@ -26,7 +26,7 @@ type memoryStatusEx struct {
 }
 
 func VirtualMemory() (*VirtualMemoryStat, error) {
-	var memInfo memoryStatusEx
+	var memInfo MEMORYSTATUSEX
 	memInfo.cbSize = uint32(unsafe.Sizeof(memInfo))
 	mem, _, _ := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&memInfo)))
 	if mem == 0 {

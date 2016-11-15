@@ -5,9 +5,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/yhat/gopsutil/cpu"
-	"github.com/yhat/gopsutil/internal/common"
-	"github.com/yhat/gopsutil/mem"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 var invoke common.Invoker
@@ -20,14 +19,13 @@ type Process struct {
 	Pid            int32 `json:"pid"`
 	name           string
 	status         string
-	parent         int32
 	numCtxSwitches *NumCtxSwitchesStat
 	uids           []int32
 	gids           []int32
 	numThreads     int32
 	memInfo        *MemoryInfoStat
 
-	lastCPUTimes *cpu.TimesStat
+	lastCPUTimes *cpu.CPUTimesStat
 	lastCPUTime  time.Time
 }
 
@@ -49,10 +47,10 @@ type RlimitStat struct {
 }
 
 type IOCountersStat struct {
-	ReadCount  uint64 `json:"readCount"`
-	WriteCount uint64 `json:"writeCount"`
-	ReadBytes  uint64 `json:"readBytes"`
-	WriteBytes uint64 `json:"writeBytes"`
+	ReadCount  uint64 `json:"read_count"`
+	WriteCount uint64 `json:"write_count"`
+	ReadBytes  uint64 `json:"read_bytes"`
+	WriteBytes uint64 `json:"write_bytes"`
 }
 
 type NumCtxSwitchesStat struct {
@@ -107,61 +105,45 @@ func PidExists(pid int32) (bool, error) {
 
 // If interval is 0, return difference from last call(non-blocking).
 // If interval > 0, wait interval sec and return diffrence between start and end.
-func (p *Process) Percent(interval time.Duration) (float64, error) {
-	cpuTimes, err := p.Times()
+func (p *Process) CPUPercent(interval time.Duration) (float64, error) {
+	numcpu := runtime.NumCPU()
+	calculate := func(t1, t2 *cpu.CPUTimesStat, delta float64) float64 {
+		if delta == 0 {
+			return 0
+		}
+		delta_proc := (t2.User - t1.User) + (t2.System - t1.System)
+		overall_percent := ((delta_proc / delta) * 100) * float64(numcpu)
+		return overall_percent
+	}
+
+	cpuTimes, err := p.CPUTimes()
 	if err != nil {
 		return 0, err
 	}
-	now := time.Now()
 
 	if interval > 0 {
 		p.lastCPUTimes = cpuTimes
-		p.lastCPUTime = now
+		p.lastCPUTime = time.Now()
 		time.Sleep(interval)
-		cpuTimes, err = p.Times()
-		now = time.Now()
+		cpuTimes, err = p.CPUTimes()
 		if err != nil {
 			return 0, err
 		}
 	} else {
 		if p.lastCPUTimes == nil {
 			// invoked first time
-			p.lastCPUTimes = cpuTimes
-			p.lastCPUTime = now
+			p.lastCPUTimes, err = p.CPUTimes()
+			if err != nil {
+				return 0, err
+			}
+			p.lastCPUTime = time.Now()
 			return 0, nil
 		}
 	}
 
-	numcpu := runtime.NumCPU()
-	delta := (now.Sub(p.lastCPUTime).Seconds()) * float64(numcpu)
-	ret := calculatePercent(p.lastCPUTimes, cpuTimes, delta, numcpu)
+	delta := (time.Now().Sub(p.lastCPUTime).Seconds()) * float64(numcpu)
+	ret := calculate(p.lastCPUTimes, cpuTimes, float64(delta))
 	p.lastCPUTimes = cpuTimes
-	p.lastCPUTime = now
+	p.lastCPUTime = time.Now()
 	return ret, nil
-}
-
-func calculatePercent(t1, t2 *cpu.TimesStat, delta float64, numcpu int) float64 {
-	if delta == 0 {
-		return 0
-	}
-	delta_proc := t2.Total() - t1.Total()
-	overall_percent := ((delta_proc / delta) * 100) * float64(numcpu)
-	return overall_percent
-}
-
-// MemoryPercent returns how many percent of the total RAM this process uses
-func (p *Process) MemoryPercent() (float32, error) {
-	machineMemory, err := mem.VirtualMemory()
-	if err != nil {
-		return 0, err
-	}
-	total := machineMemory.Total
-
-	processMemory, err := p.MemoryInfo()
-	if err != nil {
-		return 0, err
-	}
-	used := processMemory.RSS
-
-	return (100 * float32(used) / float32(total)), nil
 }

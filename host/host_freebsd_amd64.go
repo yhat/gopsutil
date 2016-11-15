@@ -9,7 +9,6 @@ const (
 	sizeofInt      = 0x4
 	sizeofLong     = 0x8
 	sizeofLongLong = 0x8
-	sizeOfUtmpx    = 197 // TODO: why should 197, not 0x118
 )
 
 type (
@@ -25,7 +24,6 @@ type Utmp struct {
 	Host [16]int8
 	Time int32
 }
-
 type Utmpx struct {
 	Type int16
 	Tv   Timeval
@@ -34,10 +32,9 @@ type Utmpx struct {
 	User [32]int8
 	Line [16]int8
 	Host [125]int8
-	//      Host [128]int8
-	//      X__ut_spare [64]int8
+	//	Host [128]int8
+	//	X__ut_spare [64]int8
 }
-
 type Timeval struct {
 	Sec  [4]byte
 	Usec [3]byte

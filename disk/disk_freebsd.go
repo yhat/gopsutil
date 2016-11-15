@@ -5,16 +5,23 @@ package disk
 import (
 	"bytes"
 	"encoding/binary"
-	"path"
 	"strconv"
 	"syscall"
 	"unsafe"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
-func Partitions(all bool) ([]PartitionStat, error) {
-	var ret []PartitionStat
+const (
+	CTLKern = 1
+	//	KernDevstat    = 773 // for freebsd 8.4
+	//	KernDevstatAll = 772 // for freebsd 8.4
+	KernDevstat    = 974
+	KernDevstatAll = 975
+)
+
+func DiskPartitions(all bool) ([]DiskPartitionStat, error) {
+	var ret []DiskPartitionStat
 
 	// get length
 	count, err := syscall.Getfsstat(nil, MNT_WAIT)
@@ -76,42 +83,39 @@ func Partitions(all bool) ([]PartitionStat, error) {
 			opts += ",nfs4acls"
 		}
 
-		d := PartitionStat{
+		d := DiskPartitionStat{
 			Device:     common.IntToString(stat.Mntfromname[:]),
 			Mountpoint: common.IntToString(stat.Mntonname[:]),
 			Fstype:     common.IntToString(stat.Fstypename[:]),
 			Opts:       opts,
 		}
-		if all == false {
-			if !path.IsAbs(d.Device) || !common.PathExists(d.Device) {
-				continue
-			}
-		}
-
 		ret = append(ret, d)
 	}
 
 	return ret, nil
 }
 
-func IOCounters() (map[string]IOCountersStat, error) {
+func DiskIOCounters() (map[string]DiskIOCountersStat, error) {
 	// statinfo->devinfo->devstat
 	// /usr/include/devinfo.h
-	ret := make(map[string]IOCountersStat)
 
-	r, err := syscall.Sysctl("kern.devstat.all")
+	//	sysctl.sysctl ('kern.devstat.all', 0)
+	ret := make(map[string]DiskIOCountersStat)
+	mib := []int32{CTLKern, KernDevstat, KernDevstatAll}
+
+	buf, length, err := common.CallSyscall(mib)
 	if err != nil {
 		return nil, err
 	}
-	buf := []byte(r)
-	length := len(buf)
 
-	count := int(uint64(length) / uint64(sizeOfDevstat))
+	ds := Devstat{}
+	devstatLen := int(unsafe.Sizeof(ds))
+	count := int(length / uint64(devstatLen))
 
 	buf = buf[8:] // devstat.all has version in the head.
 	// parse buf to Devstat
 	for i := 0; i < count; i++ {
-		b := buf[i*sizeOfDevstat : i*sizeOfDevstat+sizeOfDevstat]
+		b := buf[i*devstatLen : i*devstatLen+devstatLen]
 		d, err := parseDevstat(b)
 		if err != nil {
 			continue
@@ -119,14 +123,13 @@ func IOCounters() (map[string]IOCountersStat, error) {
 		un := strconv.Itoa(int(d.Unit_number))
 		name := common.IntToString(d.Device_name[:]) + un
 
-		ds := IOCountersStat{
+		ds := DiskIOCountersStat{
 			ReadCount:  d.Operations[DEVSTAT_READ],
 			WriteCount: d.Operations[DEVSTAT_WRITE],
 			ReadBytes:  d.Bytes[DEVSTAT_READ],
 			WriteBytes: d.Bytes[DEVSTAT_WRITE],
-			ReadTime:   uint64(d.Duration[DEVSTAT_READ].Compute() * 1000),
-			WriteTime:  uint64(d.Duration[DEVSTAT_WRITE].Compute() * 1000),
-			IoTime:     uint64(d.Busy_time.Compute() * 1000),
+			ReadTime:   d.Duration[DEVSTAT_READ].Compute(),
+			WriteTime:  d.Duration[DEVSTAT_WRITE].Compute(),
 			Name:       name,
 		}
 		ret[name] = ds
@@ -135,9 +138,9 @@ func IOCounters() (map[string]IOCountersStat, error) {
 	return ret, nil
 }
 
-func (b Bintime) Compute() float64 {
+func (b Bintime) Compute() uint64 {
 	BINTIME_SCALE := 5.42101086242752217003726400434970855712890625e-20
-	return float64(b.Sec) + float64(b.Frac)*BINTIME_SCALE
+	return uint64(b.Sec) + b.Frac*uint64(BINTIME_SCALE)
 }
 
 // BT2LD(time)     ((long double)(time).sec + (time).frac * BINTIME_SCALE)
@@ -163,7 +166,7 @@ func parseDevstat(buf []byte) (Devstat, error) {
 	var ds Devstat
 	br := bytes.NewReader(buf)
 	//	err := binary.Read(br, binary.LittleEndian, &ds)
-	err := common.Read(br, binary.LittleEndian, &ds)
+	err := Read(br, binary.LittleEndian, &ds)
 	if err != nil {
 		return ds, err
 	}

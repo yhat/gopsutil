@@ -1,44 +1,25 @@
 gopsutil: psutil for golang
 ==============================
 
-.. image:: https://circleci.com/gh/shirou/gopsutil.svg?&style=shield
-        :target: https://circleci.com/gh/shirou/gopsutil
+.. image:: https://drone.io/github.com/shirou/gopsutil/status.png
+        :target: https://drone.io/github.com/shirou/gopsutil
 
 .. image:: https://coveralls.io/repos/shirou/gopsutil/badge.svg?branch=master
         :target: https://coveralls.io/r/shirou/gopsutil?branch=master
 
-.. image:: https://godoc.org/github.com/yhat/gopsutil?status.svg
-        :target: http://godoc.org/github.com/yhat/gopsutil
+.. image:: https://godoc.org/github.com/shirou/gopsutil?status.svg
+        :target: http://godoc.org/github.com/shirou/gopsutil
 
 This is a port of psutil (http://pythonhosted.org/psutil/). The challenge is porting all
-psutil functions on some architectures.
+psutil functions on some architectures...
 
+.. highlights:: Package Structure Changed!
 
-.. highlights:: Breaking Changes!
+   Package (a.k.a. directory) structure has been changed!! see `issue 24 <https://github.com/shirou/gopsutil/issues/24>`_
 
-   Breaking changes is introduced at v2. See `issue 174 <https://github.com/yhat/gopsutil/issues/174>`_ .
+.. highlights:: golang 1.4 will become REQUIRED!
 
-
-Migrating to v2
--------------------------
-
-On gopsutil itself, `v2migration.sh <https://github.com/yhat/gopsutil/blob/v2/v2migration.sh>`_ is used for migration. It can not be commonly used, but it may help you with migration.
-
-
-Tag semantics
-^^^^^^^^^^^^^^^
-
-gopsutil tag policy is almost same as Semantic Versioning, but automatically increase like Ubuntu versioning.
-
-for example, `v2.16.10` means
-
-- v2: major version
-- 16: release year, 2016
-- 10: release month
-
-gopsutil aims to keep backwards-compatiblity until major version change.
-
-Taged at every end of month, but there are only a few commits, it can be skipped.
+   Since syscall package becomes frozen, we should use golang/x/sys of golang 1.4 as soon as possible.
 
 
 Available Architectures
@@ -55,26 +36,22 @@ All works are implemented without cgo by porting c struct to golang struct.
 Usage
 ---------
 
-Note: gopsutil v2 breaks compatibility. If you want to stay with compatibility, please use v1 branch and vendoring.
-
 .. code:: go
 
-   package main
-
    import (
-       "fmt"
+   	"fmt"
 
-       "github.com/yhat/gopsutil/mem"
+   	"github.com/shirou/gopsutil/mem"
    )
 
    func main() {
-       v, _ := mem.VirtualMemory()
+   	v, _ := mem.VirtualMemory()
 
-       // almost every return value is a struct
-       fmt.Printf("Total: %v, Free:%v, UsedPercent:%f%%\n", v.Total, v.Free, v.UsedPercent)
+   	// almost every return value is a struct
+   	fmt.Printf("Total: %v, Free:%v, UsedPercent:%f%%\n", v.Total, v.Free, v.UsedPercent)
 
-       // convert to JSON. String() is also implemented
-       fmt.Println(v)
+   	// convert to JSON. String() is also implemented
+   	fmt.Println(v)
    }
 
 The output is below.
@@ -82,23 +59,15 @@ The output is below.
 ::
 
   Total: 3179569152, Free:284233728, UsedPercent:84.508194%
-  {"total":3179569152,"available":492572672,"used":2895335424,"usedPercent":84.50819439828305, (snip...)}
+  {"total":3179569152,"available":492572672,"used":2895335424,"usedPercent":84.50819439828305, (snip)}
 
-You can set an alternative location to :code:`/proc` by setting the :code:`HOST_PROC` environment variable.
-
-You can set an alternative location to :code:`/sys` by setting the :code:`HOST_SYS` environment variable.
-
-You can set an alternative location to :code:`/etc` by setting the :code:`HOST_ETC` environment variable.
+You can set an alternative location to /proc by setting the HOST_PROC environment variable.
+You can set an alternative location to /sys by setting the HOST_SYS environment variable.
 
 Documentation
 ------------------------
 
-see http://godoc.org/github.com/yhat/gopsutil
-
-Requirements
------------------
-
-- go1.5 or above is required.
+see http://godoc.org/github.com/shirou/gopsutil
 
 
 More Info
@@ -157,11 +126,6 @@ Several methods have been added which are not present in psutil, but will provid
   - system wide stats on network protocols (i.e IP, TCP, UDP, etc.)
   - sourced from /proc/net/snmp
 
-- iptables nf_conntrack (linux only)
-
-  - system wide stats on netfilter conntrack module
-  - sourced from /proc/sys/net/netfilter/nf_conntrack_count
-
 Some codes are ported from Ohai. many thanks.
 
 
@@ -169,30 +133,29 @@ Current Status
 ------------------
 
 - x: work
-- b: almost works, but something is broken
+- b: almost work but something broken
 
-=================== ====== ======= ====== =======
-name                Linux  FreeBSD MacOSX Windows
-cpu_times             x      x      x       x
-cpu_count             x      x      x       x
-cpu_percent           x      x      x       x
-cpu_times_percent     x      x      x       x
-virtual_memory        x      x      x       x
-swap_memory           x      x      x
-disk_partitions       x      x      x       x
-disk_io_counters      x      x
-disk_usage            x      x      x       x
-net_io_counters       x      x      b       x
-boot_time             x      x      x       x
-users                 x      x      x       x
-pids                  x      x      x       x
-pid_exists            x      x      x       x
-net_connections       x             x
-net_protocols         x
+================= ====== ======= ====== =======
+name              Linux  FreeBSD MacOSX Windows
+cpu_times            x      x      x       x
+cpu_count            x      x      x       x
+cpu_percent          x      x      x       x
+cpu_times_percent    x      x      x       x
+virtual_memory       x      x      x       x
+swap_memory          x      x      x
+disk_partitions      x      x      x       x
+disk_io_counters     x      x
+disk_usage           x      x      x       x
+net_io_counters      x      x      b       x
+boot_time            x      x      x       x
+users                x      x      x       x
+pids                 x      x      x       x
+pid_exists           x      x      x       x
+net_connections      x             x
+net_protocols        x
 net_if_addrs
 net_if_stats
-netfilter_conntrack   x
-=================== ====== ======= ====== =======
+================= ====== ======= ====== =======
 
 Process class
 ^^^^^^^^^^^^^^^
@@ -210,13 +173,13 @@ exe                 x     x              x
 uids                x     x      x
 gids                x     x      x
 terminal            x     x      x
-io_counters         x     x              x
-nice                x     x      x       x
+io_counters         x
+nice                x            x       x
 num_fds             x
 num_ctx_switches    x
 num_threads         x     x      x       x
 cpu_times           x
-memory_info         x     x      x       x
+memory_info         x     x      x
 memory_info_ex      x
 memory_maps         x
 open_files          x
@@ -249,7 +212,7 @@ hostname              x     x      x       x
   proces              x     x
   os                  x     x      x       x
   platform            x     x      x
-  platformfamily      x     x      x
+  platformfamiliy     x     x      x
   virtualization      x
 **CPU**
   VendorID            x     x      x       x

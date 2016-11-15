@@ -11,8 +11,8 @@ import (
 
 	"github.com/StackExchange/wmi"
 
-	"github.com/yhat/gopsutil/internal/common"
-	process "github.com/yhat/gopsutil/process"
+	"github.com/shirou/gopsutil/internal/common"
+	process "github.com/shirou/gopsutil/process"
 )
 
 var (
@@ -28,8 +28,8 @@ type Win32_OperatingSystem struct {
 	LastBootUpTime time.Time
 }
 
-func Info() (*InfoStat, error) {
-	ret := &InfoStat{
+func HostInfo() (*HostInfoStat, error) {
+	ret := &HostInfoStat{
 		OS: runtime.GOOS,
 	}
 
@@ -38,7 +38,7 @@ func Info() (*InfoStat, error) {
 		ret.Hostname = hostname
 	}
 
-	platform, family, version, err := PlatformInformation()
+	platform, family, version, err := GetPlatformInformation()
 	if err == nil {
 		ret.Platform = platform
 		ret.PlatformFamily = family
@@ -50,13 +50,15 @@ func Info() (*InfoStat, error) {
 	boot, err := BootTime()
 	if err == nil {
 		ret.BootTime = boot
-		ret.Uptime, _ = Uptime()
+		ret.Uptime = uptime(boot)
 	}
 
 	procs, err := process.Pids()
-	if err == nil {
-		ret.Procs = uint64(len(procs))
+	if err != nil {
+		return ret, err
 	}
+
+	ret.Procs = uint64(len(procs))
 
 	return ret, nil
 }
@@ -74,7 +76,7 @@ func GetOSInfo() (Win32_OperatingSystem, error) {
 	return dst[0], nil
 }
 
-func Uptime() (uint64, error) {
+func BootTime() (uint64, error) {
 	if osInfo == nil {
 		_, err := GetOSInfo()
 		if err != nil {
@@ -86,19 +88,19 @@ func Uptime() (uint64, error) {
 	return uint64(now.Sub(t).Seconds()), nil
 }
 
-func bootTime(up uint64) uint64 {
-	return uint64(time.Now().Unix()) - up
+func uptime(boot uint64) uint64 {
+	return uint64(time.Now().Unix()) - boot
 }
 
-func BootTime() (uint64, error) {
-	up, err := Uptime()
+func Uptime() (uint64, error) {
+	boot, err := BootTime()
 	if err != nil {
 		return 0, err
 	}
-	return bootTime(up), nil
+	return uptime(boot), nil
 }
 
-func PlatformInformation() (platform string, family string, version string, err error) {
+func GetPlatformInformation() (platform string, family string, version string, err error) {
 	if osInfo == nil {
 		_, err = GetOSInfo()
 		if err != nil {

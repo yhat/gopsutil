@@ -2,31 +2,22 @@ package host
 
 import (
 	"encoding/json"
-
-	"github.com/yhat/gopsutil/internal/common"
 )
-
-var invoke common.Invoker
-
-func init() {
-	invoke = common.Invoke{}
-}
 
 // A HostInfoStat describes the host status.
 // This is not in the psutil but it useful.
-type InfoStat struct {
+type HostInfoStat struct {
 	Hostname             string `json:"hostname"`
 	Uptime               uint64 `json:"uptime"`
-	BootTime             uint64 `json:"bootTime"`
+	BootTime             uint64 `json:"boot_time"`
 	Procs                uint64 `json:"procs"`           // number of processes
 	OS                   string `json:"os"`              // ex: freebsd, linux
 	Platform             string `json:"platform"`        // ex: ubuntu, linuxmint
-	PlatformFamily       string `json:"platformFamily"`  // ex: debian, rhel
-	PlatformVersion      string `json:"platformVersion"` // version of the complete OS
-	KernelVersion        string `json:"kernelVersion"`   // version of the OS kernel (if available)
-	VirtualizationSystem string `json:"virtualizationSystem"`
-	VirtualizationRole   string `json:"virtualizationRole"` // guest or host
-	HostID               string `json:"hostid"`             // ex: uuid
+	PlatformFamily       string `json:"platform_family"` // ex: debian, rhel
+	PlatformVersion      string `json:"platform_version"`
+	VirtualizationSystem string `json:"virtualization_system"`
+	VirtualizationRole   string `json:"virtualization_role"` // guest or host
+
 }
 
 type UserStat struct {
@@ -36,7 +27,7 @@ type UserStat struct {
 	Started  int    `json:"started"`
 }
 
-func (h InfoStat) String() string {
+func (h HostInfoStat) String() string {
 	s, _ := json.Marshal(h)
 	return string(s)
 }

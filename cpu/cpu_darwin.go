@@ -21,7 +21,7 @@ const (
 // default value. from time.h
 var ClocksPerSec = float64(128)
 
-func Times(percpu bool) ([]TimesStat, error) {
+func CPUTimes(percpu bool) ([]CPUTimesStat, error) {
 	if percpu {
 		return perCPUTimes()
 	}
@@ -30,18 +30,15 @@ func Times(percpu bool) ([]TimesStat, error) {
 }
 
 // Returns only one CPUInfoStat on FreeBSD
-func Info() ([]InfoStat, error) {
-	var ret []InfoStat
-	sysctl, err := exec.LookPath("/usr/sbin/sysctl")
-	if err != nil {
-		return ret, err
-	}
-	out, err := invoke.Command(sysctl, "machdep.cpu")
+func CPUInfo() ([]CPUInfoStat, error) {
+	var ret []CPUInfoStat
+
+	out, err := exec.Command("/usr/sbin/sysctl", "machdep.cpu").Output()
 	if err != nil {
 		return ret, err
 	}
 
-	c := InfoStat{}
+	c := CPUInfoStat{}
 	for _, line := range strings.Split(string(out), "\n") {
 		values := strings.Fields(line)
 		if len(values) < 1 {
@@ -90,17 +87,17 @@ func Info() ([]InfoStat, error) {
 
 	// Use the rated frequency of the CPU. This is a static value and does not
 	// account for low power or Turbo Boost modes.
-	out, err = invoke.Command(sysctl, "hw.cpufrequency")
+	out, err = exec.Command("/usr/sbin/sysctl", "hw.cpufrequency").Output()
 	if err != nil {
 		return ret, err
 	}
 
 	values := strings.Fields(string(out))
-	hz, err := strconv.ParseFloat(values[1], 64)
+	mhz, err := strconv.ParseFloat(values[1], 64)
 	if err != nil {
 		return ret, err
 	}
-	c.Mhz = hz / 1000000.0
+	c.Mhz = mhz / 1000000.0
 
 	return append(ret, c), nil
 }

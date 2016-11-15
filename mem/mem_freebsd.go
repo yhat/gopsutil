@@ -3,12 +3,11 @@
 package mem
 
 import (
-	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
-
-	"github.com/yhat/gopsutil/internal/common"
+	"errors"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 func VirtualMemory() (*VirtualMemoryStat, error) {
@@ -79,8 +78,8 @@ func VirtualMemory() (*VirtualMemoryStat, error) {
 	}
 
 	ret.Available = ret.Inactive + ret.Cached + ret.Free
-	ret.Used = ret.Total - ret.Available
-	ret.UsedPercent = float64(ret.Used) / float64(ret.Total) * 100.0
+	ret.Used = ret.Active + ret.Wired + ret.Cached
+	ret.UsedPercent = float64(ret.Total-ret.Available) / float64(ret.Total) * 100.0
 
 	return ret, nil
 }
@@ -88,12 +87,7 @@ func VirtualMemory() (*VirtualMemoryStat, error) {
 // Return swapinfo
 // FreeBSD can have multiple swap devices. but use only first device
 func SwapMemory() (*SwapMemoryStat, error) {
-	swapinfo, err := exec.LookPath("swapinfo")
-	if err != nil {
-		return nil, err
-	}
-
-	out, err := invoke.Command(swapinfo)
+	out, err := exec.Command("swapinfo").Output()
 	if err != nil {
 		return nil, err
 	}

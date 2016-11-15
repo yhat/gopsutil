@@ -1,21 +1,21 @@
-// +build freebsd darwin
+// +build linux freebsd darwin
 
 package net
 
 import (
 	"strings"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 // Return a list of network connections opened.
-func Connections(kind string) ([]ConnectionStat, error) {
-	return ConnectionsPid(kind, 0)
+func NetConnections(kind string) ([]NetConnectionStat, error) {
+	return NetConnectionsPid(kind, 0)
 }
 
 // Return a list of network connections opened by a process.
-func ConnectionsPid(kind string, pid int32) ([]ConnectionStat, error) {
-	var ret []ConnectionStat
+func NetConnectionsPid(kind string, pid int32) ([]NetConnectionStat, error) {
+	var ret []NetConnectionStat
 
 	args := []string{"-i"}
 	switch strings.ToLower(kind) {
@@ -44,7 +44,7 @@ func ConnectionsPid(kind string, pid int32) ([]ConnectionStat, error) {
 	case "udp6":
 		args = append(args, "6udp")
 	case "unix":
-		return ret, common.ErrNotImplementedError
+		return ret, common.NotImplementedError
 	}
 
 	r, err := common.CallLsof(invoke, pid, args...)

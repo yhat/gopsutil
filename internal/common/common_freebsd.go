@@ -3,7 +3,6 @@
 package common
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -11,15 +10,7 @@ import (
 )
 
 func DoSysctrl(mib string) ([]string, error) {
-	err := os.Setenv("LC_ALL", "C")
-	if err != nil {
-		return []string{}, err
-	}
-	sysctl, err := exec.LookPath("/sbin/sysctl")
-	if err != nil {
-		return []string{}, err
-	}
-	out, err := exec.Command(sysctl, "-n", mib).Output()
+	out, err := exec.Command("/sbin/sysctl", "-n", mib).Output()
 	if err != nil {
 		return []string{}, err
 	}
@@ -31,14 +22,13 @@ func DoSysctrl(mib string) ([]string, error) {
 }
 
 func CallSyscall(mib []int32) ([]byte, uint64, error) {
-	mibptr := unsafe.Pointer(&mib[0])
 	miblen := uint64(len(mib))
 
 	// get required buffer size
 	length := uint64(0)
 	_, _, err := syscall.Syscall6(
 		syscall.SYS___SYSCTL,
-		uintptr(mibptr),
+		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(miblen),
 		0,
 		uintptr(unsafe.Pointer(&length)),
@@ -56,7 +46,7 @@ func CallSyscall(mib []int32) ([]byte, uint64, error) {
 	buf := make([]byte, length)
 	_, _, err = syscall.Syscall6(
 		syscall.SYS___SYSCTL,
-		uintptr(mibptr),
+		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(miblen),
 		uintptr(unsafe.Pointer(&buf[0])),
 		uintptr(unsafe.Pointer(&length)),

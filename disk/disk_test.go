@@ -11,7 +11,7 @@ func TestDisk_usage(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		path = "C:"
 	}
-	v, err := Usage(path)
+	v, err := DiskUsage(path)
 	if err != nil {
 		t.Errorf("error %v", err)
 	}
@@ -21,14 +21,11 @@ func TestDisk_usage(t *testing.T) {
 }
 
 func TestDisk_partitions(t *testing.T) {
-	ret, err := Partitions(false)
+	ret, err := DiskPartitions(false)
 	if err != nil || len(ret) == 0 {
 		t.Errorf("error %v", err)
 	}
-	empty := PartitionStat{}
-	if len(ret) == 0 {
-		t.Errorf("ret is empty")
-	}
+	empty := DiskPartitionStat{}
 	for _, disk := range ret {
 		if disk == empty {
 			t.Errorf("Could not get device info %v", disk)
@@ -37,14 +34,14 @@ func TestDisk_partitions(t *testing.T) {
 }
 
 func TestDisk_io_counters(t *testing.T) {
-	ret, err := IOCounters()
+	ret, err := DiskIOCounters()
 	if err != nil {
 		t.Errorf("error %v", err)
 	}
 	if len(ret) == 0 {
-		t.Errorf("ret is empty")
+		t.Errorf("ret is empty, %v", ret)
 	}
-	empty := IOCountersStat{}
+	empty := DiskIOCountersStat{}
 	for part, io := range ret {
 		if io == empty {
 			t.Errorf("io_counter error %v, %v", part, io)
@@ -53,7 +50,7 @@ func TestDisk_io_counters(t *testing.T) {
 }
 
 func TestDiskUsageStat_String(t *testing.T) {
-	v := UsageStat{
+	v := DiskUsageStat{
 		Path:              "/",
 		Total:             1000,
 		Free:              2000,
@@ -65,14 +62,14 @@ func TestDiskUsageStat_String(t *testing.T) {
 		InodesUsedPercent: 49.1,
 		Fstype:            "ext4",
 	}
-	e := `{"path":"/","fstype":"ext4","total":1000,"free":2000,"used":3000,"usedPercent":50.1,"inodesTotal":4000,"inodesUsed":5000,"inodesFree":6000,"inodesUsedPercent":49.1}`
+	e := `{"path":"/","fstype":"ext4","total":1000,"free":2000,"used":3000,"used_percent":50.1,"inodes_total":4000,"inodes_used":5000,"inodes_free":6000,"inodes_used_percent":49.1}`
 	if e != fmt.Sprintf("%v", v) {
 		t.Errorf("DiskUsageStat string is invalid: %v", v)
 	}
 }
 
 func TestDiskPartitionStat_String(t *testing.T) {
-	v := PartitionStat{
+	v := DiskPartitionStat{
 		Device:     "sd01",
 		Mountpoint: "/",
 		Fstype:     "ext4",
@@ -85,7 +82,7 @@ func TestDiskPartitionStat_String(t *testing.T) {
 }
 
 func TestDiskIOCountersStat_String(t *testing.T) {
-	v := IOCountersStat{
+	v := DiskIOCountersStat{
 		Name:         "sd01",
 		ReadCount:    100,
 		WriteCount:   200,
@@ -93,7 +90,7 @@ func TestDiskIOCountersStat_String(t *testing.T) {
 		WriteBytes:   400,
 		SerialNumber: "SERIAL",
 	}
-	e := `{"readCount":100,"mergedReadCount":0,"writeCount":200,"mergedWriteCount":0,"readBytes":300,"writeBytes":400,"readTime":0,"writeTime":0,"iopsInProgress":0,"ioTime":0,"weightedIO":0,"name":"sd01","serialNumber":"SERIAL"}`
+	e := `{"read_count":100,"write_count":200,"read_bytes":300,"write_bytes":400,"read_time":0,"write_time":0,"name":"sd01","io_time":0,"serial_number":"SERIAL"}`
 	if e != fmt.Sprintf("%v", v) {
 		t.Errorf("DiskUsageStat string is invalid: %v", v)
 	}

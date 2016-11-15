@@ -11,51 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	cpu "github.com/yhat/gopsutil/cpu"
-	"github.com/yhat/gopsutil/internal/common"
+	cpu "github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/internal/common"
 )
-
-// GetDockerStat returns a list of Docker basic stats.
-// This requires certain permission.
-func GetDockerStat() ([]CgroupDockerStat, error) {
-	path, err := exec.LookPath("docker")
-	if err != nil {
-		return nil, ErrDockerNotAvailable
-	}
-
-	out, err := invoke.Command(path, "ps", "-a", "--no-trunc", "--format", "{{.ID}}|{{.Image}}|{{.Names}}|{{.Status}}")
-	if err != nil {
-		return []CgroupDockerStat{}, err
-	}
-	lines := strings.Split(string(out), "\n")
-	ret := make([]CgroupDockerStat, 0, len(lines))
-
-	for _, l := range lines {
-		if l == "" {
-			continue
-		}
-		cols := strings.Split(l, "|")
-		if len(cols) != 4 {
-			continue
-		}
-		names := strings.Split(cols[2], ",")
-		stat := CgroupDockerStat{
-			ContainerID: cols[0],
-			Name:        names[0],
-			Image:       cols[1],
-			Status:      cols[3],
-			Running:     strings.Contains(cols[3], "Up"),
-		}
-		ret = append(ret, stat)
-	}
-
-	return ret, nil
-}
-
-func (c CgroupDockerStat) String() string {
-	s, _ := json.Marshal(c)
-	return string(s)
-}
 
 // GetDockerIDList returnes a list of DockerID.
 // This requires certain permission.
@@ -65,7 +23,7 @@ func GetDockerIDList() ([]string, error) {
 		return nil, ErrDockerNotAvailable
 	}
 
-	out, err := invoke.Command(path, "ps", "-q", "--no-trunc")
+	out, err := exec.Command(path, "ps", "-q", "--no-trunc").Output()
 	if err != nil {
 		return []string{}, err
 	}
@@ -83,20 +41,20 @@ func GetDockerIDList() ([]string, error) {
 }
 
 // CgroupCPU returnes specified cgroup id CPU status.
-// containerID is same as docker id if you use docker.
+// containerId is same as docker id if you use docker.
 // If you use container via systemd.slice, you could use
-// containerID = docker-<container id>.scope and base=/sys/fs/cgroup/cpuacct/system.slice/
-func CgroupCPU(containerID string, base string) (*cpu.TimesStat, error) {
-	statfile := getCgroupFilePath(containerID, base, "cpuacct", "cpuacct.stat")
+// containerId = docker-<container id>.scope and base=/sys/fs/cgroup/cpuacct/system.slice/
+func CgroupCPU(containerId string, base string) (*cpu.CPUTimesStat, error) {
+	statfile := getCgroupFilePath(containerId, base, "cpuacct", "cpuacct.stat")
 	lines, err := common.ReadLines(statfile)
 	if err != nil {
 		return nil, err
 	}
-	// empty containerID means all cgroup
-	if len(containerID) == 0 {
-		containerID = "all"
+	// empty containerId means all cgroup
+	if len(containerId) == 0 {
+		containerId = "all"
 	}
-	ret := &cpu.TimesStat{CPU: containerID}
+	ret := &cpu.CPUTimesStat{CPU: containerId}
 	for _, line := range lines {
 		fields := strings.Split(line, " ")
 		if fields[0] == "user" {
@@ -116,22 +74,22 @@ func CgroupCPU(containerID string, base string) (*cpu.TimesStat, error) {
 	return ret, nil
 }
 
-func CgroupCPUDocker(containerid string) (*cpu.TimesStat, error) {
+func CgroupCPUDocker(containerid string) (*cpu.CPUTimesStat, error) {
 	return CgroupCPU(containerid, common.HostSys("fs/cgroup/cpuacct/docker"))
 }
 
-func CgroupMem(containerID string, base string) (*CgroupMemStat, error) {
-	statfile := getCgroupFilePath(containerID, base, "memory", "memory.stat")
+func CgroupMem(containerId string, base string) (*CgroupMemStat, error) {
+	statfile := getCgroupFilePath(containerId, base, "memory", "memory.stat")
 
-	// empty containerID means all cgroup
-	if len(containerID) == 0 {
-		containerID = "all"
+	// empty containerId means all cgroup
+	if len(containerId) == 0 {
+		containerId = "all"
 	}
 	lines, err := common.ReadLines(statfile)
 	if err != nil {
 		return nil, err
 	}
-	ret := &CgroupMemStat{ContainerID: containerID}
+	ret := &CgroupMemStat{ContainerID: containerId}
 	for _, line := range lines {
 		fields := strings.Split(line, " ")
 		v, err := strconv.ParseUint(fields[1], 10, 64)
@@ -143,9 +101,9 @@ func CgroupMem(containerID string, base string) (*CgroupMemStat, error) {
 			ret.Cache = v
 		case "rss":
 			ret.RSS = v
-		case "rssHuge":
+		case "rss_huge":
 			ret.RSSHuge = v
-		case "mappedFile":
+		case "mapped_file":
 			ret.MappedFile = v
 		case "pgpgin":
 			ret.Pgpgin = v
@@ -155,60 +113,60 @@ func CgroupMem(containerID string, base string) (*CgroupMemStat, error) {
 			ret.Pgfault = v
 		case "pgmajfault":
 			ret.Pgmajfault = v
-		case "inactiveAnon":
+		case "inactive_anon":
 			ret.InactiveAnon = v
-		case "activeAnon":
+		case "active_anon":
 			ret.ActiveAnon = v
-		case "inactiveFile":
+		case "inactive_file":
 			ret.InactiveFile = v
-		case "activeFile":
+		case "active_file":
 			ret.ActiveFile = v
 		case "unevictable":
 			ret.Unevictable = v
-		case "hierarchicalMemoryLimit":
+		case "hierarchical_memory_limit":
 			ret.HierarchicalMemoryLimit = v
-		case "totalCache":
+		case "total_cache":
 			ret.TotalCache = v
-		case "totalRss":
+		case "total_rss":
 			ret.TotalRSS = v
-		case "totalRssHuge":
+		case "total_rss_huge":
 			ret.TotalRSSHuge = v
-		case "totalMappedFile":
+		case "total_mapped_file":
 			ret.TotalMappedFile = v
-		case "totalPgpgin":
+		case "total_pgpgin":
 			ret.TotalPgpgIn = v
-		case "totalPgpgout":
+		case "total_pgpgout":
 			ret.TotalPgpgOut = v
-		case "totalPgfault":
+		case "total_pgfault":
 			ret.TotalPgFault = v
-		case "totalPgmajfault":
+		case "total_pgmajfault":
 			ret.TotalPgMajFault = v
-		case "totalInactiveAnon":
+		case "total_inactive_anon":
 			ret.TotalInactiveAnon = v
-		case "totalActiveAnon":
+		case "total_active_anon":
 			ret.TotalActiveAnon = v
-		case "totalInactiveFile":
+		case "total_inactive_file":
 			ret.TotalInactiveFile = v
-		case "totalActiveFile":
+		case "total_active_file":
 			ret.TotalActiveFile = v
-		case "totalUnevictable":
+		case "total_unevictable":
 			ret.TotalUnevictable = v
 		}
 	}
 
-	r, err := getCgroupMemFile(containerID, base, "memory.usage_in_bytes")
+	r, err := getCgroupMemFile(containerId, base, "memory.usage_in_bytes")
 	if err == nil {
 		ret.MemUsageInBytes = r
 	}
-	r, err = getCgroupMemFile(containerID, base, "memory.max_usage_in_bytes")
+	r, err = getCgroupMemFile(containerId, base, "memory.max_usage_in_bytes")
 	if err == nil {
 		ret.MemMaxUsageInBytes = r
 	}
-	r, err = getCgroupMemFile(containerID, base, "memoryLimitInBbytes")
+	r, err = getCgroupMemFile(containerId, base, "memory.limit_in_bytes")
 	if err == nil {
 		ret.MemLimitInBytes = r
 	}
-	r, err = getCgroupMemFile(containerID, base, "memoryFailcnt")
+	r, err = getCgroupMemFile(containerId, base, "memory.failcnt")
 	if err == nil {
 		ret.MemFailCnt = r
 	}
@@ -216,8 +174,8 @@ func CgroupMem(containerID string, base string) (*CgroupMemStat, error) {
 	return ret, nil
 }
 
-func CgroupMemDocker(containerID string) (*CgroupMemStat, error) {
-	return CgroupMem(containerID, common.HostSys("fs/cgroup/memory/docker"))
+func CgroupMemDocker(containerId string) (*CgroupMemStat, error) {
+	return CgroupMem(containerId, common.HostSys("fs/cgroup/memory/docker"))
 }
 
 func (m CgroupMemStat) String() string {
@@ -226,23 +184,24 @@ func (m CgroupMemStat) String() string {
 }
 
 // getCgroupFilePath constructs file path to get targetted stats file.
-func getCgroupFilePath(containerID, base, target, file string) string {
+func getCgroupFilePath(containerId, base, target, file string) string {
 	if len(base) == 0 {
 		base = common.HostSys(fmt.Sprintf("fs/cgroup/%s/docker", target))
 	}
-	statfile := path.Join(base, containerID, file)
+	statfile := path.Join(base, containerId, file)
 
 	if _, err := os.Stat(statfile); os.IsNotExist(err) {
 		statfile = path.Join(
-			common.HostSys(fmt.Sprintf("fs/cgroup/%s/system.slice", target)), "docker-"+containerID+".scope", file)
+			common.HostSys(fmt.Sprintf("fs/cgroup/%s/system.slice", target)), "docker-"+containerId+".scope", file)
 	}
 
 	return statfile
 }
 
 // getCgroupMemFile reads a cgroup file and return the contents as uint64.
-func getCgroupMemFile(containerID, base, file string) (uint64, error) {
-	statfile := getCgroupFilePath(containerID, base, "memory", file)
+func getCgroupMemFile(containerId, base, file string) (uint64, error) {
+
+	statfile := getCgroupFilePath(containerId, base, "memory", file)
 	lines, err := common.ReadLines(statfile)
 	if err != nil {
 		return 0, err

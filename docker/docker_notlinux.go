@@ -5,15 +5,9 @@ package docker
 import (
 	"encoding/json"
 
-	"github.com/yhat/gopsutil/cpu"
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/cpu"
+        "github.com/shirou/gopsutil/internal/common"
 )
-
-// GetDockerStat returns a list of Docker basic stats.
-// This requires certain permission.
-func GetDockerStat() ([]CgroupDockerStat, error) {
-	return nil, ErrDockerNotAvailable
-}
 
 // GetDockerIDList returnes a list of DockerID.
 // This requires certain permission.
@@ -25,11 +19,11 @@ func GetDockerIDList() ([]string, error) {
 // containerid is same as docker id if you use docker.
 // If you use container via systemd.slice, you could use
 // containerid = docker-<container id>.scope and base=/sys/fs/cgroup/cpuacct/system.slice/
-func CgroupCPU(containerid string, base string) (*cpu.TimesStat, error) {
+func CgroupCPU(containerid string, base string) (*cpu.CPUTimesStat, error) {
 	return nil, ErrCgroupNotAvailable
 }
 
-func CgroupCPUDocker(containerid string) (*cpu.TimesStat, error) {
+func CgroupCPUDocker(containerid string) (*cpu.CPUTimesStat, error) {
 	return CgroupCPU(containerid, common.HostSys("fs/cgroup/cpuacct/docker"))
 }
 
