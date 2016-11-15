@@ -13,9 +13,9 @@ import (
 	"github.com/StackExchange/wmi"
 	"github.com/shirou/w32"
 
-	cpu "github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/internal/common"
-	net "github.com/shirou/gopsutil/net"
+	cpu "github.com/yhat/gopsutil/cpu"
+	"github.com/yhat/gopsutil/internal/common"
+	net "github.com/yhat/gopsutil/net"
 )
 
 const (
