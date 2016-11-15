@@ -6,13 +6,26 @@ import (
 )
 
 func TestHostInfo(t *testing.T) {
-	v, err := HostInfo()
+	v, err := Info()
 	if err != nil {
 		t.Errorf("error %v", err)
 	}
-	empty := &HostInfoStat{}
+	empty := &InfoStat{}
 	if v == empty {
 		t.Errorf("Could not get hostinfo %v", v)
+	}
+	if v.Procs == 0 {
+		t.Errorf("Could not determine the number of host processes")
+	}
+}
+
+func TestUptime(t *testing.T) {
+	v, err := Uptime()
+	if err != nil {
+		t.Errorf("error %v", err)
+	}
+	if v == 0 {
+		t.Errorf("Could not get up time %v", v)
 	}
 }
 
@@ -24,6 +37,9 @@ func TestBoot_time(t *testing.T) {
 	if v == 0 {
 		t.Errorf("Could not get boot time %v", v)
 	}
+	if v < 946652400 {
+		t.Errorf("Invalid Boottime, older than 2000-01-01")
+	}
 }
 
 func TestUsers(t *testing.T) {
@@ -32,6 +48,9 @@ func TestUsers(t *testing.T) {
 		t.Errorf("error %v", err)
 	}
 	empty := UserStat{}
+	if len(v) == 0 {
+		t.Errorf("Users is empty")
+	}
 	for _, u := range v {
 		if u == empty {
 			t.Errorf("Could not Users %v", v)
@@ -40,15 +59,16 @@ func TestUsers(t *testing.T) {
 }
 
 func TestHostInfoStat_String(t *testing.T) {
-	v := HostInfoStat{
+	v := InfoStat{
 		Hostname: "test",
 		Uptime:   3000,
 		Procs:    100,
 		OS:       "linux",
 		Platform: "ubuntu",
 		BootTime: 1447040000,
+		HostID:   "edfd25ff-3c9c-b1a4-e660-bd826495ad35",
 	}
-	e := `{"hostname":"test","uptime":3000,"boot_time":1447040000,"procs":100,"os":"linux","platform":"ubuntu","platform_family":"","platform_version":"","virtualization_system":"","virtualization_role":""}`
+	e := `{"hostname":"test","uptime":3000,"bootTime":1447040000,"procs":100,"os":"linux","platform":"ubuntu","platformFamily":"","platformVersion":"","kernelVersion":"","virtualizationSystem":"","virtualizationRole":"","hostid":"edfd25ff-3c9c-b1a4-e660-bd826495ad35"}`
 	if e != fmt.Sprintf("%v", v) {
 		t.Errorf("HostInfoStat string is invalid: %v", v)
 	}

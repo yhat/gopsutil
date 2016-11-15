@@ -4,7 +4,7 @@ package disk
 
 import "syscall"
 
-func DiskUsage(path string) (*DiskUsageStat, error) {
+func Usage(path string) (*UsageStat, error) {
 	stat := syscall.Statfs_t{}
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
@@ -12,7 +12,7 @@ func DiskUsage(path string) (*DiskUsageStat, error) {
 	}
 	bsize := stat.Bsize
 
-	ret := &DiskUsageStat{
+	ret := &UsageStat{
 		Path:        path,
 		Fstype:      getFsType(stat),
 		Total:       (uint64(stat.Blocks) * uint64(bsize)),
@@ -21,6 +21,10 @@ func DiskUsage(path string) (*DiskUsageStat, error) {
 		InodesFree:  (uint64(stat.Ffree)),
 	}
 
+	// if could not get InodesTotal, return empty
+	if ret.InodesTotal < ret.InodesFree {
+		return ret, nil
+	}
 	ret.InodesUsed = (ret.InodesTotal - ret.InodesFree)
 	ret.InodesUsedPercent = (float64(ret.InodesUsed) / float64(ret.InodesTotal)) * 100.0
 	ret.Used = (uint64(stat.Blocks) - uint64(stat.Bfree)) * uint64(bsize)

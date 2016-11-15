@@ -5,21 +5,27 @@ package process
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/StackExchange/wmi"
-	"github.com/yhat/w32"
+	"github.com/shirou/w32"
 
-	"github.com/yhat/gopsutil/internal/common"
-	cpu "github.com/yhat/gopsutil/cpu"
-	net "github.com/yhat/gopsutil/net"
+	cpu "github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/internal/common"
+	net "github.com/shirou/gopsutil/net"
 )
 
 const (
 	NoMoreFiles   = 0x12
 	MaxPathLength = 260
+)
+
+var (
+	modpsapi                 = syscall.NewLazyDLL("psapi.dll")
+	procGetProcessMemoryInfo = modpsapi.NewProc("GetProcessMemoryInfo")
 )
 
 type SystemProcessInformation struct {
@@ -45,13 +51,18 @@ type MemoryMapsStat struct {
 }
 
 type Win32_Process struct {
-	Name           string
-	ExecutablePath *string
-	CommandLine    *string
-	Priority       uint32
-	CreationDate   *time.Time
-	ProcessId      uint32
-	ThreadCount    uint32
+	Name                string
+	ExecutablePath      *string
+	CommandLine         *string
+	Priority            uint32
+	CreationDate        *time.Time
+	ProcessID           uint32
+	ThreadCount         uint32
+	Status              *string
+	ReadOperationCount  uint64
+	ReadTransferCount   uint64
+	WriteOperationCount uint64
+	WriteTransferCount  uint64
 
 	/*
 		CSCreationClassName   string
@@ -70,19 +81,14 @@ type Win32_Process struct {
 		OtherTransferCount    uint64
 		PageFaults            uint32
 		PageFileUsage         uint32
-		ParentProcessId       uint32
+		ParentProcessID       uint32
 		PeakPageFileUsage     uint32
 		PeakVirtualSize       uint64
 		PeakWorkingSetSize    uint32
 		PrivatePageCount      uint64
-		ReadOperationCount    uint64
-		ReadTransferCount     uint64
-		Status                *string
 		TerminationDate       *time.Time
 		UserModeTime          uint64
 		WorkingSetSize        uint64
-		WriteOperationCount   uint64
-		WriteTransferCount    uint64
 	*/
 }
 
@@ -145,38 +151,49 @@ func (p *Process) Cmdline() (string, error) {
 	return *dst[0].CommandLine, nil
 }
 
+// CmdlineSlice returns the command line arguments of the process as a slice with each
+// element being an argument. This merely returns the CommandLine informations passed
+// to the process split on the 0x20 ASCII character.
+func (p *Process) CmdlineSlice() ([]string, error) {
+	cmdline, err := p.Cmdline()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(cmdline, " "), nil
+}
+
 func (p *Process) CreateTime() (int64, error) {
-	dst, err := GetWin32Proc(p.Pid)
+	ru, err := getRusage(p.Pid)
 	if err != nil {
 		return 0, fmt.Errorf("could not get CreationDate: %s", err)
 	}
-	date := *dst[0].CreationDate
-	return date.Unix(), nil
+
+	return ru.CreationTime.Nanoseconds() / 1000000, nil
 }
 
 func (p *Process) Cwd() (string, error) {
-	return "", common.NotImplementedError
+	return "", common.ErrNotImplementedError
 }
 func (p *Process) Parent() (*Process, error) {
-	return p, common.NotImplementedError
+	return p, common.ErrNotImplementedError
 }
 func (p *Process) Status() (string, error) {
-	return "", common.NotImplementedError
+	return "", common.ErrNotImplementedError
 }
 func (p *Process) Username() (string, error) {
-	return "", common.NotImplementedError
+	return "", common.ErrNotImplementedError
 }
 func (p *Process) Uids() ([]int32, error) {
 	var uids []int32
 
-	return uids, common.NotImplementedError
+	return uids, common.ErrNotImplementedError
 }
 func (p *Process) Gids() ([]int32, error) {
 	var gids []int32
-	return gids, common.NotImplementedError
+	return gids, common.ErrNotImplementedError
 }
 func (p *Process) Terminal() (string, error) {
-	return "", common.NotImplementedError
+	return "", common.ErrNotImplementedError
 }
 
 // Nice returnes priority in Windows
@@ -188,21 +205,33 @@ func (p *Process) Nice() (int32, error) {
 	return int32(dst[0].Priority), nil
 }
 func (p *Process) IOnice() (int32, error) {
-	return 0, common.NotImplementedError
+	return 0, common.ErrNotImplementedError
 }
 func (p *Process) Rlimit() ([]RlimitStat, error) {
 	var rlimit []RlimitStat
 
-	return rlimit, common.NotImplementedError
+	return rlimit, common.ErrNotImplementedError
 }
+
 func (p *Process) IOCounters() (*IOCountersStat, error) {
-	return nil, common.NotImplementedError
+	dst, err := GetWin32Proc(p.Pid)
+	if err != nil || len(dst) == 0 {
+		return nil, fmt.Errorf("could not get Win32Proc: %s", err)
+	}
+	ret := &IOCountersStat{
+		ReadCount:  uint64(dst[0].ReadOperationCount),
+		ReadBytes:  uint64(dst[0].ReadTransferCount),
+		WriteCount: uint64(dst[0].WriteOperationCount),
+		WriteBytes: uint64(dst[0].WriteTransferCount),
+	}
+
+	return ret, nil
 }
 func (p *Process) NumCtxSwitches() (*NumCtxSwitchesStat, error) {
-	return nil, common.NotImplementedError
+	return nil, common.ErrNotImplementedError
 }
 func (p *Process) NumFDs() (int32, error) {
-	return 0, common.NotImplementedError
+	return 0, common.ErrNotImplementedError
 }
 func (p *Process) NumThreads() (int32, error) {
 	dst, err := GetWin32Proc(p.Pid)
@@ -213,43 +242,54 @@ func (p *Process) NumThreads() (int32, error) {
 }
 func (p *Process) Threads() (map[string]string, error) {
 	ret := make(map[string]string, 0)
-	return ret, common.NotImplementedError
+	return ret, common.ErrNotImplementedError
 }
-func (p *Process) CPUTimes() (*cpu.CPUTimesStat, error) {
-	return nil, common.NotImplementedError
+func (p *Process) Times() (*cpu.TimesStat, error) {
+	return nil, common.ErrNotImplementedError
 }
 func (p *Process) CPUAffinity() ([]int32, error) {
-	return nil, common.NotImplementedError
+	return nil, common.ErrNotImplementedError
 }
 func (p *Process) MemoryInfo() (*MemoryInfoStat, error) {
-	return nil, common.NotImplementedError
+	mem, err := getMemoryInfo(p.Pid)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &MemoryInfoStat{
+		RSS: uint64(mem.WorkingSetSize),
+		VMS: uint64(mem.PagefileUsage),
+	}
+
+	return ret, nil
 }
 func (p *Process) MemoryInfoEx() (*MemoryInfoExStat, error) {
-	return nil, common.NotImplementedError
-}
-func (p *Process) MemoryPercent() (float32, error) {
-	return 0, common.NotImplementedError
+	return nil, common.ErrNotImplementedError
 }
 
 func (p *Process) Children() ([]*Process, error) {
-	return nil, common.NotImplementedError
+	return nil, common.ErrNotImplementedError
 }
 
 func (p *Process) OpenFiles() ([]OpenFilesStat, error) {
-	return nil, common.NotImplementedError
+	return nil, common.ErrNotImplementedError
 }
 
-func (p *Process) Connections() ([]net.NetConnectionStat, error) {
-	return nil, common.NotImplementedError
+func (p *Process) Connections() ([]net.ConnectionStat, error) {
+	return nil, common.ErrNotImplementedError
+}
+
+func (p *Process) NetIOCounters(pernic bool) ([]net.IOCountersStat, error) {
+	return nil, common.ErrNotImplementedError
 }
 
 func (p *Process) IsRunning() (bool, error) {
-	return true, common.NotImplementedError
+	return true, common.ErrNotImplementedError
 }
 
 func (p *Process) MemoryMaps(grouped bool) (*[]MemoryMapsStat, error) {
-	ret := make([]MemoryMapsStat, 0)
-	return &ret, common.NotImplementedError
+	var ret []MemoryMapsStat
+	return &ret, common.ErrNotImplementedError
 }
 
 func NewProcess(pid int32) (*Process, error) {
@@ -259,20 +299,31 @@ func NewProcess(pid int32) (*Process, error) {
 }
 
 func (p *Process) SendSignal(sig syscall.Signal) error {
-	return common.NotImplementedError
+	return common.ErrNotImplementedError
 }
 
 func (p *Process) Suspend() error {
-	return common.NotImplementedError
+	return common.ErrNotImplementedError
 }
 func (p *Process) Resume() error {
-	return common.NotImplementedError
+	return common.ErrNotImplementedError
 }
+
 func (p *Process) Terminate() error {
-	return common.NotImplementedError
+	// PROCESS_TERMINATE = 0x0001
+	proc := w32.OpenProcess(0x0001, false, uint32(p.Pid))
+	ret := w32.TerminateProcess(proc, 0)
+	w32.CloseHandle(proc)
+
+	if ret == false {
+		return syscall.GetLastError()
+	} else {
+		return nil
+	}
 }
+
 func (p *Process) Kill() error {
-	return common.NotImplementedError
+	return common.ErrNotImplementedError
 }
 
 func (p *Process) getFromSnapProcess(pid int32) (int32, int32, string, error) {
@@ -315,7 +366,7 @@ func processes() ([]*Process, error) {
 	}
 	results := make([]*Process, 0, len(dst))
 	for _, proc := range dst {
-		p, err := NewProcess(int32(proc.ProcessId))
+		p, err := NewProcess(int32(proc.ProcessID))
 		if err != nil {
 			continue
 		}
@@ -341,4 +392,46 @@ func getProcInfo(pid int32) (*SystemProcessInformation, error) {
 	}
 
 	return &sysProcInfo, nil
+}
+
+func getRusage(pid int32) (*syscall.Rusage, error) {
+	var CPU syscall.Rusage
+
+	c, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return nil, err
+	}
+	defer syscall.CloseHandle(c)
+
+	if err := syscall.GetProcessTimes(c, &CPU.CreationTime, &CPU.ExitTime, &CPU.KernelTime, &CPU.UserTime); err != nil {
+		return nil, err
+	}
+
+	return &CPU, nil
+}
+
+func getMemoryInfo(pid int32) (PROCESS_MEMORY_COUNTERS, error) {
+	var mem PROCESS_MEMORY_COUNTERS
+	c, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return mem, err
+	}
+	defer syscall.CloseHandle(c)
+	if err := getProcessMemoryInfo(c, &mem); err != nil {
+		return mem, err
+	}
+
+	return mem, err
+}
+
+func getProcessMemoryInfo(h syscall.Handle, mem *PROCESS_MEMORY_COUNTERS) (err error) {
+	r1, _, e1 := syscall.Syscall(procGetProcessMemoryInfo.Addr(), 3, uintptr(h), uintptr(unsafe.Pointer(mem)), uintptr(unsafe.Sizeof(*mem)))
+	if r1 == 0 {
+		if e1 != 0 {
+			err = error(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
 }

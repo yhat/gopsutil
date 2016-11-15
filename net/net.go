@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 var invoke common.Invoker
@@ -17,16 +17,19 @@ func init() {
 	invoke = common.Invoke{}
 }
 
-type NetIOCountersStat struct {
-	Name        string `json:"name"`         // interface name
-	BytesSent   uint64 `json:"bytes_sent"`   // number of bytes sent
-	BytesRecv   uint64 `json:"bytes_recv"`   // number of bytes received
-	PacketsSent uint64 `json:"packets_sent"` // number of packets sent
-	PacketsRecv uint64 `json:"packets_recv"` // number of packets received
-	Errin       uint64 `json:"errin"`        // total number of errors while receiving
-	Errout      uint64 `json:"errout"`       // total number of errors while sending
-	Dropin      uint64 `json:"dropin"`       // total number of incoming packets which were dropped
-	Dropout     uint64 `json:"dropout"`      // total number of outgoing packets which were dropped (always 0 on OSX and BSD)
+type IOCountersStat struct {
+	Name        string `json:"name"`        // interface name
+	BytesSent   uint64 `json:"bytesSent"`   // number of bytes sent
+	BytesRecv   uint64 `json:"bytesRecv"`   // number of bytes received
+	PacketsSent uint64 `json:"packetsSent"` // number of packets sent
+	PacketsRecv uint64 `json:"packetsRecv"` // number of packets received
+	Errin       uint64 `json:"errin"`       // total number of errors while receiving
+	Errout      uint64 `json:"errout"`      // total number of errors while sending
+	Dropin      uint64 `json:"dropin"`      // total number of incoming packets which were dropped
+	Dropout     uint64 `json:"dropout"`     // total number of outgoing packets which were dropped (always 0 on OSX and BSD)
+	Fifoin      uint64 `json:"fifoin"`      // total number of FIFO buffers errors while receiving
+	Fifoout     uint64 `json:"fifoout"`     // total number of FIFO buffers errors while sending
+
 }
 
 // Addr is implemented compatibility to psutil
@@ -35,33 +38,39 @@ type Addr struct {
 	Port uint32 `json:"port"`
 }
 
-type NetConnectionStat struct {
-	Fd     uint32 `json:"fd"`
-	Family uint32 `json:"family"`
-	Type   uint32 `json:"type"`
-	Laddr  Addr   `json:"localaddr"`
-	Raddr  Addr   `json:"remoteaddr"`
-	Status string `json:"status"`
-	Pid    int32  `json:"pid"`
+type ConnectionStat struct {
+	Fd     uint32  `json:"fd"`
+	Family uint32  `json:"family"`
+	Type   uint32  `json:"type"`
+	Laddr  Addr    `json:"localaddr"`
+	Raddr  Addr    `json:"remoteaddr"`
+	Status string  `json:"status"`
+	Uids   []int32 `json:"uids"`
+	Pid    int32   `json:"pid"`
 }
 
 // System wide stats about different network protocols
-type NetProtoCountersStat struct {
+type ProtoCountersStat struct {
 	Protocol string           `json:"protocol"`
 	Stats    map[string]int64 `json:"stats"`
 }
 
 // NetInterfaceAddr is designed for represent interface addresses
-type NetInterfaceAddr struct {
+type InterfaceAddr struct {
 	Addr string `json:"addr"`
 }
 
-type NetInterfaceStat struct {
-	MTU          int                `json:"mtu"`          // maximum transmission unit
-	Name         string             `json:"name"`         // e.g., "en0", "lo0", "eth0.100"
-	HardwareAddr string             `json:"hardwareaddr"` // IEEE MAC-48, EUI-48 and EUI-64 form
-	Flags        []string           `json:"flags"`        // e.g., FlagUp, FlagLoopback, FlagMulticast
-	Addrs        []NetInterfaceAddr `json:"addrs"`
+type InterfaceStat struct {
+	MTU          int             `json:"mtu"`          // maximum transmission unit
+	Name         string          `json:"name"`         // e.g., "en0", "lo0", "eth0.100"
+	HardwareAddr string          `json:"hardwareaddr"` // IEEE MAC-48, EUI-48 and EUI-64 form
+	Flags        []string        `json:"flags"`        // e.g., FlagUp, FlagLoopback, FlagMulticast
+	Addrs        []InterfaceAddr `json:"addrs"`
+}
+
+type FilterStat struct {
+	ConnTrackCount int64 `json:"conntrackCount"`
+	ConnTrackMax   int64 `json:"conntrackMax"`
 }
 
 var constMap = map[string]int{
@@ -71,17 +80,17 @@ var constMap = map[string]int{
 	"IPv6": syscall.AF_INET6,
 }
 
-func (n NetIOCountersStat) String() string {
+func (n IOCountersStat) String() string {
 	s, _ := json.Marshal(n)
 	return string(s)
 }
 
-func (n NetConnectionStat) String() string {
+func (n ConnectionStat) String() string {
 	s, _ := json.Marshal(n)
 	return string(s)
 }
 
-func (n NetProtoCountersStat) String() string {
+func (n ProtoCountersStat) String() string {
 	s, _ := json.Marshal(n)
 	return string(s)
 }
@@ -91,22 +100,22 @@ func (a Addr) String() string {
 	return string(s)
 }
 
-func (n NetInterfaceStat) String() string {
+func (n InterfaceStat) String() string {
 	s, _ := json.Marshal(n)
 	return string(s)
 }
 
-func (n NetInterfaceAddr) String() string {
+func (n InterfaceAddr) String() string {
 	s, _ := json.Marshal(n)
 	return string(s)
 }
 
-func NetInterfaces() ([]NetInterfaceStat, error) {
+func Interfaces() ([]InterfaceStat, error) {
 	is, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
-	ret := make([]NetInterfaceStat, 0, len(is))
+	ret := make([]InterfaceStat, 0, len(is))
 	for _, ifi := range is {
 
 		var flags []string
@@ -126,7 +135,7 @@ func NetInterfaces() ([]NetInterfaceStat, error) {
 			flags = append(flags, "multicast")
 		}
 
-		r := NetInterfaceStat{
+		r := InterfaceStat{
 			Name:         ifi.Name,
 			MTU:          ifi.MTU,
 			HardwareAddr: ifi.HardwareAddr.String(),
@@ -134,9 +143,9 @@ func NetInterfaces() ([]NetInterfaceStat, error) {
 		}
 		addrs, err := ifi.Addrs()
 		if err == nil {
-			r.Addrs = make([]NetInterfaceAddr, 0, len(addrs))
+			r.Addrs = make([]InterfaceAddr, 0, len(addrs))
 			for _, addr := range addrs {
-				r.Addrs = append(r.Addrs, NetInterfaceAddr{
+				r.Addrs = append(r.Addrs, InterfaceAddr{
 					Addr: addr.String(),
 				})
 			}
@@ -148,8 +157,8 @@ func NetInterfaces() ([]NetInterfaceStat, error) {
 	return ret, nil
 }
 
-func getNetIOCountersAll(n []NetIOCountersStat) ([]NetIOCountersStat, error) {
-	r := NetIOCountersStat{
+func getIOCountersAll(n []IOCountersStat) ([]IOCountersStat, error) {
+	r := IOCountersStat{
 		Name: "all",
 	}
 	for _, nic := range n {
@@ -163,38 +172,38 @@ func getNetIOCountersAll(n []NetIOCountersStat) ([]NetIOCountersStat, error) {
 		r.Dropout += nic.Dropout
 	}
 
-	return []NetIOCountersStat{r}, nil
+	return []IOCountersStat{r}, nil
 }
 
-func parseNetLine(line string) (NetConnectionStat, error) {
+func parseNetLine(line string) (ConnectionStat, error) {
 	f := strings.Fields(line)
 	if len(f) < 9 {
-		return NetConnectionStat{}, fmt.Errorf("wrong line,%s", line)
+		return ConnectionStat{}, fmt.Errorf("wrong line,%s", line)
 	}
 
 	pid, err := strconv.Atoi(f[1])
 	if err != nil {
-		return NetConnectionStat{}, err
+		return ConnectionStat{}, err
 	}
 	fd, err := strconv.Atoi(strings.Trim(f[3], "u"))
 	if err != nil {
-		return NetConnectionStat{}, fmt.Errorf("unknown fd, %s", f[3])
+		return ConnectionStat{}, fmt.Errorf("unknown fd, %s", f[3])
 	}
 	netFamily, ok := constMap[f[4]]
 	if !ok {
-		return NetConnectionStat{}, fmt.Errorf("unknown family, %s", f[4])
+		return ConnectionStat{}, fmt.Errorf("unknown family, %s", f[4])
 	}
 	netType, ok := constMap[f[7]]
 	if !ok {
-		return NetConnectionStat{}, fmt.Errorf("unknown type, %s", f[7])
+		return ConnectionStat{}, fmt.Errorf("unknown type, %s", f[7])
 	}
 
 	laddr, raddr, err := parseNetAddr(f[8])
 	if err != nil {
-		return NetConnectionStat{}, fmt.Errorf("failed to parse netaddr, %s", f[8])
+		return ConnectionStat{}, fmt.Errorf("failed to parse netaddr, %s", f[8])
 	}
 
-	n := NetConnectionStat{
+	n := ConnectionStat{
 		Fd:     uint32(fd),
 		Family: uint32(netFamily),
 		Type:   uint32(netType),

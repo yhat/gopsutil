@@ -5,12 +5,11 @@ package cpu
 import (
 	"fmt"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/StackExchange/wmi"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
 )
 
 type Win32_Processor struct {
@@ -19,14 +18,14 @@ type Win32_Processor struct {
 	Manufacturer              string
 	Name                      string
 	NumberOfLogicalProcessors uint32
-	ProcessorId               *string
+	ProcessorID               *string
 	Stepping                  *string
 	MaxClockSpeed             uint32
 }
 
 // TODO: Get percpu
-func CPUTimes(percpu bool) ([]CPUTimesStat, error) {
-	var ret []CPUTimesStat
+func Times(percpu bool) ([]TimesStat, error) {
+	var ret []TimesStat
 
 	var lpIdleTime common.FILETIME
 	var lpKernelTime common.FILETIME
@@ -46,7 +45,7 @@ func CPUTimes(percpu bool) ([]CPUTimesStat, error) {
 	kernel := ((HIT * float64(lpKernelTime.DwHighDateTime)) + (LOT * float64(lpKernelTime.DwLowDateTime)))
 	system := (kernel - idle)
 
-	ret = append(ret, CPUTimesStat{
+	ret = append(ret, TimesStat{
 		Idle:   float64(idle),
 		User:   float64(user),
 		System: float64(system),
@@ -54,8 +53,8 @@ func CPUTimes(percpu bool) ([]CPUTimesStat, error) {
 	return ret, nil
 }
 
-func CPUInfo() ([]CPUInfoStat, error) {
-	var ret []CPUInfoStat
+func Info() ([]InfoStat, error) {
+	var ret []InfoStat
 	var dst []Win32_Processor
 	q := wmi.CreateQuery(&dst, "")
 	err := wmi.Query(q, &dst)
@@ -66,11 +65,11 @@ func CPUInfo() ([]CPUInfoStat, error) {
 	var procID string
 	for i, l := range dst {
 		procID = ""
-		if l.ProcessorId != nil {
-			procID = *l.ProcessorId
+		if l.ProcessorID != nil {
+			procID = *l.ProcessorID
 		}
 
-		cpu := CPUInfoStat{
+		cpu := InfoStat{
 			CPU:        int32(i),
 			Family:     fmt.Sprintf("%d", l.Family),
 			VendorID:   l.Manufacturer,
@@ -83,23 +82,5 @@ func CPUInfo() ([]CPUInfoStat, error) {
 		ret = append(ret, cpu)
 	}
 
-	return ret, nil
-}
-
-func CPUPercent(interval time.Duration, percpu bool) ([]float64, error) {
-	var ret []float64
-	var dst []Win32_Processor
-	q := wmi.CreateQuery(&dst, "")
-	err := wmi.Query(q, &dst)
-	if err != nil {
-		return ret, err
-	}
-	for _, l := range dst {
-		// use range but windows can only get one percent.
-		if l.LoadPercentage == nil {
-			continue
-		}
-		ret = append(ret, float64(*l.LoadPercentage))
-	}
 	return ret, nil
 }

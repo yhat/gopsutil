@@ -1,14 +1,18 @@
 package process
 
 import (
+	"fmt"
 	"os"
+	"os/user"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/yhat/gopsutil/internal/common"
+	"github.com/shirou/gopsutil/internal/common"
+	"github.com/stretchr/testify/assert"
 )
 
 var mu sync.Mutex
@@ -117,6 +121,18 @@ func Test_Process_CmdLine(t *testing.T) {
 	}
 }
 
+func Test_Process_CmdLineSlice(t *testing.T) {
+	p := testGetProcess()
+
+	v, err := p.CmdlineSlice()
+	if err != nil {
+		t.Fatalf("geting cmdline slice error %v", err)
+	}
+	if !reflect.DeepEqual(v, os.Args) {
+		t.Errorf("returned cmdline slice not as expected:\nexp: %v\ngot: %v", os.Args, v)
+	}
+}
+
 func Test_Process_Ppid(t *testing.T) {
 	p := testGetProcess()
 
@@ -136,7 +152,7 @@ func Test_Process_Status(t *testing.T) {
 	if err != nil {
 		t.Errorf("geting status error %v", err)
 	}
-	if !strings.HasPrefix(v, "S") && v != "running" && v != "sleeping" {
+	if v != "R" && v != "S" {
 		t.Errorf("could not get state %v", v)
 	}
 }
@@ -228,13 +244,13 @@ func Test_Process_Exe(t *testing.T) {
 
 func Test_Process_CpuPercent(t *testing.T) {
 	p := testGetProcess()
-	percent, err := p.CPUPercent(0)
+	percent, err := p.Percent(0)
 	if err != nil {
 		t.Errorf("error %v", err)
 	}
 	duration := time.Duration(1000) * time.Microsecond
 	time.Sleep(duration)
-	percent, err = p.CPUPercent(0)
+	percent, err = p.Percent(0)
 	if err != nil {
 		t.Errorf("error %v", err)
 	}
@@ -252,7 +268,7 @@ func Test_Process_CpuPercentLoop(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		duration := time.Duration(100) * time.Microsecond
-		percent, err := p.CPUPercent(duration)
+		percent, err := p.Percent(duration)
 		if err != nil {
 			t.Errorf("error %v", err)
 		}
@@ -325,6 +341,60 @@ func Test_Children(t *testing.T) {
 	}
 	if len(c) == 0 {
 		t.Fatalf("children is empty")
+	}
+}
+
+func Test_Username(t *testing.T) {
+	myPid := os.Getpid()
+	currentUser, _ := user.Current()
+	myUsername := currentUser.Username
+
+	process, _ := NewProcess(int32(myPid))
+	pidUsername, _ := process.Username()
+	assert.Equal(t, myUsername, pidUsername)
+}
+
+func Test_CPUTimes(t *testing.T) {
+	pid := os.Getpid()
+	process, err := NewProcess(int32(pid))
+	assert.Nil(t, err)
+
+	spinSeconds := 0.2
+	cpuTimes0, err := process.Times()
+	assert.Nil(t, err)
+
+	// Spin for a duration of spinSeconds
+	t0 := time.Now()
+	tGoal := t0.Add(time.Duration(spinSeconds*1000) * time.Millisecond)
+	assert.Nil(t, err)
+	for time.Now().Before(tGoal) {
+		// This block intentionally left blank
+	}
+
+	cpuTimes1, err := process.Times()
+	assert.Nil(t, err)
+
+	if cpuTimes0 == nil || cpuTimes1 == nil {
+		t.FailNow()
+	}
+	measuredElapsed := cpuTimes1.Total() - cpuTimes0.Total()
+	message := fmt.Sprintf("Measured %fs != spun time of %fs\ncpuTimes0=%v\ncpuTimes1=%v",
+		measuredElapsed, spinSeconds, cpuTimes0, cpuTimes1)
+	assert.True(t, measuredElapsed > float64(spinSeconds)/5, message)
+	assert.True(t, measuredElapsed < float64(spinSeconds)*5, message)
+}
+
+func Test_OpenFiles(t *testing.T) {
+	pid := os.Getpid()
+	p, err := NewProcess(int32(pid))
+	assert.Nil(t, err)
+
+	v, err := p.OpenFiles()
+	assert.Nil(t, err)
+	assert.NotEmpty(t, v) // test always open files.
+
+	for _, vv := range v {
+		assert.NotEqual(t, "", vv.Path)
 	}
 
 }
